@@ -26,8 +26,6 @@ package server
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
-
 	ctlpb "github.com/daos-stack/daos/src/control/common/proto/ctl"
 	types "github.com/daos-stack/daos/src/control/common/storage"
 	"github.com/daos-stack/daos/src/control/logging"
@@ -54,9 +52,7 @@ type scmStorage struct {
 	log         logging.Logger
 	provider    *scm.Provider
 	ext         External
-	modules     types.ScmModules
-	pmemDevs    types.PmemDevices
-	initialized bool
+	scanResults *scm.ScanResponse
 	formatted   bool
 }
 
@@ -68,17 +64,19 @@ type scmStorage struct {
 
 // Setup implementation for scmStorage providing initial device discovery
 func (s *scmStorage) Setup() error {
-	return s.Discover()
+	_, err := s.Scan()
+
+	return err
 }
 
 // Teardown implementation for scmStorage
 func (s *scmStorage) Teardown() error {
-	s.initialized = false
+	s.scanResults = nil
 	return nil
 }
 
 // Prep configures pmem device files for SCM
-func (s *scmStorage) Prep() (needsReboot bool, pmemDevs []scm.Namespace, err error) {
+func (s *scmStorage) Prep() (needsReboot bool, namespaces []scm.Namespace, err error) {
 	res, err := s.provider.Prepare(scm.PrepareRequest{})
 	if err != nil {
 		return
@@ -97,46 +95,10 @@ func (s *scmStorage) PrepReset() (needsReboot bool, err error) {
 	return res.RebootRequired, nil
 }
 
-// Discover method implementation for scmStorage
-func (s *scmStorage) Discover() error {
-	if s.initialized {
-		return nil
-	}
-
-	res, err := s.provider.Scan(scm.ScanRequest{})
-	if res != nil {
-		// set after modules have been discovered, don't depend on retrieving
-		// PMEM device files through external tool (fails w/out ndctl runtime
-		// dep, whose presence is only enforced when installed via RPM).
-		s.initialized = true
-
-		s.modules = loadModules(res.Modules)
-		// noop if ndctl failed
-		s.pmemDevs = translateNamespaces(res.Namespaces)
-	}
-	if err != nil {
-		return errors.WithMessage(err, msgIpmctlDiscoverFail)
-	}
-
-	return nil
-}
-
-func loadModules(mms []scm.Module) (pbMms types.ScmModules) {
-	for _, c := range mms {
-		pbMms = append(
-			pbMms,
-			&ctlpb.ScmModule{
-				Loc: &ctlpb.ScmModule_Location{
-					Channel:    c.ChannelID,
-					Channelpos: c.ChannelPosition,
-					Memctrlr:   c.ControllerID,
-					Socket:     c.SocketID,
-				},
-				Physicalid: c.PhysicalID,
-				Capacity:   c.Capacity,
-			})
-	}
-	return
+// Scan method implementation for scmStorage, delegate to provider.
+func (s *scmStorage) Scan() (*scm.ScanResponse, error) {
+	// always scan by default
+	return s.provider.Scan(scm.ScanRequest{Rescan: true})
 }
 
 // newMntRet creates and populates NVMe ctrlr result and logs error through
@@ -166,7 +128,7 @@ func (s *scmStorage) Format(cfg storage.ScmConfig, results *(types.ScmMountResul
 		return
 	}
 
-	if !s.initialized {
+	if s.scanResults == nil {
 		addMretFormat(ctlpb.ResponseStatus_CTRL_ERR_APP, msgScmNotInited)
 		return
 	}
