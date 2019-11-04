@@ -106,6 +106,7 @@ cont_child_alloc_ref(void *key, unsigned int ksize, void *varg,
 	return rc;
 }
 
+#if 0
 static int
 cont_start_agg_ult(struct ds_cont_child *cont)
 {
@@ -127,6 +128,7 @@ cont_start_agg_ult(struct ds_cont_child *cont)
 	}
 	return rc;
 }
+#endif
 
 static void
 cont_stop_agg_ult(struct ds_cont_child *cont)
@@ -839,9 +841,11 @@ ds_cont_local_open(uuid_t pool_uuid, uuid_t cont_hdl_uuid, uuid_t cont_uuid,
 	if (cont_uuid != NULL) {
 		struct ds_dtx_resync_args	*ddra = NULL;
 
+#if 0
 		rc = cont_start_agg_ult(hdl->sch_cont);
 		if (rc)
 			goto err_cont;
+#endif
 
 		rc = dtx_batched_commit_register(hdl);
 		if (rc != 0) {
