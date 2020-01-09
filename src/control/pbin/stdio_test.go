@@ -23,11 +23,11 @@
 package pbin_test
 
 import (
-	"bytes"
 	"os"
 	"os/exec"
 	"testing"
 
+	"github.com/daos-stack/daos/src/control/logging"
 	"github.com/daos-stack/daos/src/control/pbin"
 )
 
@@ -60,7 +60,7 @@ func echo() {
 }
 
 func TestStdioSimpleParentChild(t *testing.T) {
-	var errBuf bytes.Buffer
+	var errBuf logging.LogBuffer
 	defer func() {
 		if t.Failed() {
 			t.Logf("child stderr:\n%s", errBuf.String())
