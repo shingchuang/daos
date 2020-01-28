@@ -2129,7 +2129,7 @@ func TestMgmtSvc_StartRanks(t *testing.T) {
 					srv._superblock = nil
 					continue
 				}
-				if tc.instancesStopped { // real runner reports not started
+				if tc.instancesStopped { // real runner reports stopped
 					srv.runner = ioserver.NewRunner(log,
 						ioserver.NewConfig())
 				}
