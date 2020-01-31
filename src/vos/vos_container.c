@@ -209,6 +209,8 @@ cont_free(struct d_ulink *ulink)
 			vea_hint_unload(cont->vc_hint_ctxt[i]);
 	}
 
+	vos_ts_evict(&cont->vc_ts_idx, VOS_TS_TYPE_CONT);
+
 	D_FREE(cont);
 }
 

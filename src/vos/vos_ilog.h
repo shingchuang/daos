@@ -31,7 +31,8 @@
 #define __VOS_ILOG_H__
 
 #include <daos/common.h>
-#include <ilog.h>
+#include "ilog.h"
+#include "vos_ts.h"
 
 struct vos_container;
 
@@ -214,5 +215,23 @@ vos_ilog_aggregate(daos_handle_t coh, struct ilog_df *ilog,
 
 #endif
 
+/** Return (or allocate and return) the timestamp cache entry associated
+ *  with the ilog.
+ *
+ *  \param	ilog[in]	The incarnation log
+ *  \param	type[in]	The type of the timestamp
+ *
+ *  \return the existing or new entry
+ */
+struct vos_ts_entry *
+vos_ilog_ts_get(struct ilog_df *ilog, uint32_t type);
+
+/** Evict the cached timestamp entry, if present
+ *
+ *  \param	ilog[in]	The incarnation log
+ *  \param	type[in]	The type of the timestamp
+ */
+void
+vos_ilog_ts_evict(struct ilog_df *ilog, uint32_t type);
 
 #endif /* __VOS_ILOG_H__ */

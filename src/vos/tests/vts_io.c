@@ -505,7 +505,7 @@ io_test_obj_update(struct io_test_args *arg, daos_epoch_t epoch,
 
 	if (!(arg->ta_flags & TF_ZERO_COPY)) {
 		rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, epoch, 0,
-				    dkey, 1, iod, NULL, sgl);
+				    0, dkey, 1, iod, NULL, sgl);
 		if (rc != 0 && verbose)
 			print_error("Failed to update: "DF_RC"\n", DP_RC(rc));
 		return rc;
@@ -513,8 +513,8 @@ io_test_obj_update(struct io_test_args *arg, daos_epoch_t epoch,
 	/* Punch can't be zero copy */
 	assert_true(iod->iod_size > 0);
 
-	rc = vos_update_begin(arg->ctx.tc_co_hdl, arg->oid, epoch, dkey, 1, iod,
-			      NULL, &ioh, dth);
+	rc = vos_update_begin(arg->ctx.tc_co_hdl, arg->oid, epoch, 0, dkey, 1,
+			      iod, NULL, &ioh, dth);
 	if (rc != 0) {
 		if (verbose && rc != -DER_INPROGRESS)
 			print_error("Failed to prepare ZC update: "DF_RC"\n",
@@ -562,14 +562,14 @@ io_test_obj_fetch(struct io_test_args *arg, daos_epoch_t epoch,
 
 	if (!(arg->ta_flags & TF_ZERO_COPY)) {
 		rc = vos_obj_fetch(arg->ctx.tc_co_hdl,
-				   arg->oid, epoch, dkey, 1, iod,
+				   arg->oid, epoch, 0, dkey, 1, iod,
 				   sgl);
 		if (rc != 0 && verbose)
 			print_error("Failed to fetch: "DF_RC"\n", DP_RC(rc));
 		return rc;
 	}
 
-	rc = vos_fetch_begin(arg->ctx.tc_co_hdl, arg->oid, epoch, dkey,
+	rc = vos_fetch_begin(arg->ctx.tc_co_hdl, arg->oid, epoch, 0, dkey,
 			     1, iod, false, &ioh);
 	if (rc != 0) {
 		if (verbose && rc != -DER_INPROGRESS)
@@ -1375,7 +1375,7 @@ pool_cont_same_uuid(void **state)
 	iod.iod_type	= DAOS_IOD_ARRAY;
 
 	oid = gen_oid(arg->ofeat);
-	ret = vos_obj_update(coh, oid, 10, 0, &dkey, 1, &iod, NULL, &sgl);
+	ret = vos_obj_update(coh, oid, 10, 0, 0, &dkey, 1, &iod, NULL, &sgl);
 	assert_int_equal(ret, 0);
 
 	ret = vos_cont_close(coh);
@@ -1522,15 +1522,15 @@ io_simple_one_key_cross_container(void **state)
 	iod.iod_type	= DAOS_IOD_ARRAY;
 
 	l_oid = gen_oid(arg->ofeat);
-	rc  = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, epoch, 0, &dkey, 1,
-			     &iod, NULL, &sgl);
+	rc  = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, epoch, 0, 0, &dkey,
+			     1, &iod, NULL, &sgl);
 	if (rc) {
 		print_error("Failed to update "DF_RC"\n", DP_RC(rc));
 		goto failed;
 	}
 
-	rc = vos_obj_update(arg->addn_co, l_oid, epoch, 0, &dkey, 1, &iod, NULL,
-			    &sgl);
+	rc = vos_obj_update(arg->addn_co, l_oid, epoch, 0, 0, &dkey, 1, &iod,
+			    NULL, &sgl);
 	if (rc) {
 		print_error("Failed to update "DF_RC"\n", DP_RC(rc));
 		goto failed;
@@ -1545,7 +1545,7 @@ io_simple_one_key_cross_container(void **state)
 	 * This should succeed.
 	 */
 	rc = vos_obj_fetch(arg->addn_co, l_oid, epoch,
-			   &dkey, 1, &iod, &sgl);
+			   0, &dkey, 1, &iod, &sgl);
 	assert_memory_equal(update_buf, fetch_buf, UPDATE_BUF_SIZE);
 
 	memset(fetch_buf, 0, UPDATE_BUF_SIZE);
@@ -1557,7 +1557,7 @@ io_simple_one_key_cross_container(void **state)
 	 * from second container should throw an error
 	 */
 	rc = vos_obj_fetch(arg->addn_co, arg->oid, epoch,
-			   &dkey, 1, &iod, &sgl);
+			   0, &dkey, 1, &iod, &sgl);
 	/* This fetch should fail */
 	assert_memory_not_equal(update_buf, fetch_buf, UPDATE_BUF_SIZE);
 
@@ -1666,8 +1666,8 @@ io_sgl_update(void **state)
 	}
 
 	/* Write/Update */
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, 1, 0, &dkey, 1, &iod,
-			    NULL, &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, 1, 0, 0, &dkey, 1,
+			    &iod, NULL, &sgl);
 	daos_sgl_fini(&sgl, true);
 
 	if (rc) {
@@ -1682,7 +1682,7 @@ io_sgl_update(void **state)
 	assert_int_equal(rc, 0);
 	d_iov_set(sgl.sg_iovs, &fetch_buf[0], SGL_TEST_BUF_COUNT *
 		     SGL_TEST_BUF_SIZE);
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, arg->oid, 1, &dkey, 1, &iod,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, arg->oid, 1, 0, &dkey, 1, &iod,
 			   &sgl);
 	if (rc) {
 		print_error("Failed to fetch: "DF_RC"\n", DP_RC(rc));
@@ -1745,8 +1745,8 @@ io_sgl_fetch(void **state)
 		     SGL_TEST_BUF_SIZE);
 
 	/* Write/Update */
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, 1, 0, &dkey, 1, &iod,
-			    NULL, &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, 1, 0, 0, &dkey, 1,
+			    &iod, NULL, &sgl);
 	if (rc)
 		goto exit;
 	daos_sgl_fini(&sgl, false);
@@ -1765,7 +1765,7 @@ io_sgl_fetch(void **state)
 			SGL_TEST_BUF_SIZE);
 	}
 	/* Now fetch */
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, arg->oid, 1, &dkey, 1, &iod,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, arg->oid, 1, 0, &dkey, 1, &iod,
 			   &sgl);
 	if (rc)
 		goto exit;
@@ -1831,14 +1831,14 @@ io_fetch_hole(void **state)
 	sgl.sg_nr = 1;
 
 	/* Write/Update */
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, 1, 0, &dkey, 1, &iod,
-			    NULL, &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, 1, 0, 0, &dkey, 1,
+			    &iod, NULL, &sgl);
 	assert_int_equal(rc, 0);
 	inc_cntr(arg->ta_flags);
 
 	/* Fetch */
 	d_iov_set(&val_iov, &fetch_buf[0], 3 * 1024);
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, arg->oid, 1, &dkey, 1, &iod,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, arg->oid, 1, 0, &dkey, 1, &iod,
 			   &sgl);
 	assert_int_equal(rc, 0);
 
@@ -1860,8 +1860,8 @@ io_fetch_hole(void **state)
 	d_iov_set(&val_iov, &update_buf[0], 2 * 1024);
 	sgl.sg_iovs = &val_iov;
 	/* Update using epoch 2 */
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, 2, 0, &dkey, 1, &iod,
-			    NULL, &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, arg->oid, 2, 0, 0, &dkey, 1,
+			    &iod, NULL, &sgl);
 	assert_int_equal(rc, 0);
 
 	/* Now fetch all three and test that the "hole" is untouched */
@@ -1870,7 +1870,7 @@ io_fetch_hole(void **state)
 	memset(fetch_buf, 0, 3 * 1024);
 	d_iov_set(&val_iov, &fetch_buf[0], 3 * 1024);
 	/* Fetch using epoch 2 */
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, arg->oid, 2, &dkey, 1, &iod,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, arg->oid, 2, 0, &dkey, 1, &iod,
 			   &sgl);
 	assert_int_equal(rc, 0);
 
@@ -1993,24 +1993,24 @@ static void gen_query_tree(struct io_test_args *arg, daos_unit_oid_t oid)
 			recx.rx_nr = 1;
 
 			rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0,
-					    &dkey, 1, &iod, NULL, &sgl);
+					    0, &dkey, 1, &iod, NULL, &sgl);
 			assert_int_equal(rc, 0);
 
 			recx.rx_idx = 1;
 			rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0,
-					    &dkey, 1, &iod, NULL, &sgl);
+					    0, &dkey, 1, &iod, NULL, &sgl);
 			assert_int_equal(rc, 0);
 
 			recx.rx_idx = 2;
 			rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0,
-					    &dkey, 1, &iod, NULL, &sgl);
+					    0, &dkey, 1, &iod, NULL, &sgl);
 			assert_int_equal(rc, 0);
 
 			recx.rx_idx = 1;
 			recx.rx_nr = 2;
 			iod.iod_size = 0; /* punch */
 			rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0,
-					    &dkey, 1, &iod, NULL, &sgl);
+					    0, &dkey, 1, &iod, NULL, &sgl);
 			assert_int_equal(rc, 0);
 		}
 	}
@@ -2023,8 +2023,8 @@ static void gen_query_tree(struct io_test_args *arg, daos_unit_oid_t oid)
 	iod.iod_size = 0; /* punch */
 	dkey_value = MAX_INT_KEY - KEY_INC;
 	akey_value = MAX_INT_KEY;
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0, &dkey, 1, &iod,
-			    NULL, &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0, 0, &dkey, 1,
+			    &iod, NULL, &sgl);
 	assert_int_equal(rc, 0);
 
 }
@@ -2265,8 +2265,8 @@ update_dkey(void **state, daos_unit_oid_t oid, daos_epoch_t epoch,
 	recx.rx_idx = 0;
 	recx.rx_nr = val_iov.iov_len;
 
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0, &dkey, 1, &iod,
-			    NULL, &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0, 0, &dkey, 1,
+			    &iod, NULL, &sgl);
 	assert_int_equal(rc, 0);
 }
 

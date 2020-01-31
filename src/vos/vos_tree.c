@@ -357,6 +357,8 @@ ktr_rec_free(struct btr_instance *tins, struct btr_record *rec, void *args)
 	krec = vos_rec2krec(tins, rec);
 	umem_attr_get(&tins->ti_umm, &uma);
 
+	vos_ilog_ts_evict(&krec->kr_ilog, (krec->kr_bmap & KREC_BF_DKEY) ?
+			  VOS_TS_TYPE_DKEY : VOS_TS_TYPE_AKEY);
 	vos_ilog_desc_cbs_init(&cbs, tins->ti_coh);
 	rc = ilog_destroy(&tins->ti_umm, &cbs, &krec->kr_ilog);
 	if (rc != 0)

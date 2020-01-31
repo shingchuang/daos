@@ -619,8 +619,8 @@ punch_model_test(void **state)
 	d_iov_set(&sgl.sg_iovs[0], (void *)under, strlen(under));
 
 	/* Write the original value (under) */
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 1, 0, &dkey, 1, &iod, NULL,
-			    &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 1, 0, 0, &dkey, 1, &iod,
+			    NULL, &sgl);
 	assert_int_equal(rc, 0);
 	/* Punch the akey */
 	rc = vos_obj_punch(arg->ctx.tc_co_hdl, oid, 2, 0, 0, &dkey, 1, &akey,
@@ -630,14 +630,14 @@ punch_model_test(void **state)
 	/* Write the new value (expected) */
 	rex.rx_nr = strlen(expected);
 	d_iov_set(&sgl.sg_iovs[0], (void *)expected, strlen(expected));
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 3, 0, &dkey, 1, &iod, NULL,
-			    &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 3, 0, 0, &dkey, 1, &iod,
+			    NULL, &sgl);
 	assert_int_equal(rc, 0);
 
 	/* Now read back original # of bytes */
 	rex.rx_nr = strlen(under);
 	d_iov_set(&sgl.sg_iovs[0], (void *)buf, strlen(under));
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 4, &dkey, 1,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 4, 0, &dkey, 1,
 			   &iod, &sgl);
 	assert_int_equal(rc, 0);
 
@@ -645,8 +645,8 @@ punch_model_test(void **state)
 
 	/* Write the original value at latest epoch (under) */
 	d_iov_set(&sgl.sg_iovs[0], (void *)under, strlen(under));
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 5, 0, &dkey, 1, &iod, NULL,
-			    &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 5, 0, 0, &dkey, 1, &iod,
+			    NULL, &sgl);
 	assert_int_equal(rc, 0);
 	/* Punch the dkey */
 	rc = vos_obj_punch(arg->ctx.tc_co_hdl, oid, 6, 0, 0, &dkey, 0, NULL,
@@ -656,15 +656,15 @@ punch_model_test(void **state)
 	/* Write the new value (expected) at latest epoch*/
 	rex.rx_nr = strlen(expected);
 	d_iov_set(&sgl.sg_iovs[0], (void *)expected, strlen(expected));
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 7, 0, &dkey, 1, &iod, NULL,
-			    &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 7, 0, 0, &dkey, 1, &iod,
+			    NULL, &sgl);
 	assert_int_equal(rc, 0);
 
 	memset(buf, 0, sizeof(buf));
 	/* Now read back original # of bytes */
 	rex.rx_nr = strlen(under);
 	d_iov_set(&sgl.sg_iovs[0], (void *)buf, strlen(under));
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 8, &dkey, 1,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 8, 0, &dkey, 1,
 			   &iod, &sgl);
 	assert_int_equal(rc, 0);
 
@@ -673,8 +673,8 @@ punch_model_test(void **state)
 	/* Write one more at 9 */
 	rex.rx_nr = strlen(expected);
 	d_iov_set(&sgl.sg_iovs[0], (void *)expected, strlen(expected));
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 9, 0, &dkey, 1, &iod, NULL,
-			    &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 9, 0, 0, &dkey, 1, &iod,
+			    NULL, &sgl);
 	assert_int_equal(rc, 0);
 
 	/* Punch the object at 10 */
@@ -685,7 +685,7 @@ punch_model_test(void **state)
 	/* Write one more at 11 */
 	rex.rx_nr = strlen(latest);
 	d_iov_set(&sgl.sg_iovs[0], (void *)latest, strlen(latest));
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 11, 0, &dkey, 1, &iod,
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 11, 0, 0, &dkey, 1, &iod,
 			    NULL, &sgl);
 	assert_int_equal(rc, 0);
 
@@ -693,7 +693,7 @@ punch_model_test(void **state)
 	memset(buf, 0, sizeof(buf));
 	rex.rx_nr = strlen(under);
 	d_iov_set(&sgl.sg_iovs[0], (void *)buf, strlen(under));
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 5, &dkey, 1,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 5, 0, &dkey, 1,
 			   &iod, &sgl);
 	assert_int_equal(rc, 0);
 	assert_int_equal(strncmp(buf, under, strlen(under)), 0);
@@ -722,7 +722,7 @@ punch_model_test(void **state)
 	memset(buf, 0, sizeof(buf));
 	rex.rx_nr = strlen(under);
 	d_iov_set(&sgl.sg_iovs[0], (void *)buf, strlen(under));
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 11, &dkey, 1,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 11, 0, &dkey, 1,
 			   &iod, &sgl);
 	assert_int_equal(rc, 0);
 	assert_int_equal(sgl.sg_iovs[0].iov_len, strlen(latest));
@@ -774,8 +774,8 @@ simple_multi_update(void **state)
 		iod[i].iod_recxs = NULL;
 	}
 
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 1, 0, &dkey, 2, iod, NULL,
-			    sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 1, 0, 0, &dkey, 2, iod,
+			    NULL, sgl);
 	assert_int_equal(rc, 0);
 
 	for (i = 0; i < 2; i++) {
@@ -783,7 +783,7 @@ simple_multi_update(void **state)
 		d_iov_set(&sgl[i].sg_iovs[0], (void *)buf[i], sizeof(buf[i]));
 	}
 
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 1, &dkey, 2,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 1, 0, &dkey, 2,
 			   iod, sgl);
 	assert_int_equal(rc, 0);
 
@@ -800,8 +800,8 @@ simple_multi_update(void **state)
 			   NULL);
 	assert_int_equal(rc, 0);
 
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 1, 0, &dkey, 2, iod, NULL,
-			    sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, 1, 0, 0, &dkey, 2, iod,
+			    NULL, sgl);
 	assert_int_equal(rc, 0);
 
 	for (i = 0; i < 2; i++) {
@@ -809,7 +809,7 @@ simple_multi_update(void **state)
 		d_iov_set(&sgl[i].sg_iovs[0], (void *)buf[i], sizeof(buf[i]));
 	}
 
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 1, &dkey, 2,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, 1, 0, &dkey, 2,
 			   iod, sgl);
 	assert_int_equal(rc, 0);
 
@@ -868,8 +868,8 @@ object_punch_and_fetch(void **state)
 		iod.iod_nr = 1;
 		iod.iod_recxs = NULL;
 
-		rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0, &dkey,
-				    1, &iod, NULL, &sgl);
+		rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0, 0,
+				    &dkey, 1, &iod, NULL, &sgl);
 		assert_int_equal(rc, 0);
 
 		*actual_keys[0] = punch_keys[i];
@@ -882,8 +882,8 @@ object_punch_and_fetch(void **state)
 		iod.iod_size = 0;
 		d_iov_set(&sgl.sg_iovs[0], (void *)buf, sizeof(buf));
 
-		rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, epoch++, &dkey, 1,
-				   &iod, &sgl);
+		rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, epoch++, 0, &dkey,
+				   1, &iod, &sgl);
 		assert_int_equal(rc, 0);
 		assert_int_equal(iod.iod_size, 0);
 	}
@@ -930,8 +930,8 @@ sgl_test(void **state)
 
 	/* Write just index 2 */
 	recx[0].rx_idx = 2;
-	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0, &dkey, 1, &iod,
-			    NULL, &sgl);
+	rc = vos_obj_update(arg->ctx.tc_co_hdl, oid, epoch++, 0, 0, &dkey, 1,
+			    &iod, NULL, &sgl);
 	assert_int_equal(rc, 0);
 
 	memset(rbuf, 'a', sizeof(rbuf));
@@ -941,7 +941,7 @@ sgl_test(void **state)
 	recx[0].rx_nr = SM_BUF_LEN;
 
 	/* Fetch whole buffer */
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, epoch++, &dkey, 1,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, epoch++, 0, &dkey, 1,
 			   &iod, &sgl);
 	assert_int_equal(rc, 0);
 	assert_int_equal(iod.iod_size, 1);
@@ -961,7 +961,7 @@ sgl_test(void **state)
 		recx[i].rx_idx = i * 2;
 		recx[i].rx_nr = 1;
 	}
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, epoch++, &dkey, 1,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, epoch++, 0, &dkey, 1,
 			   &iod, &sgl);
 	assert_int_equal(rc, 0);
 	assert_int_equal(iod.iod_size, 1);
@@ -980,7 +980,7 @@ sgl_test(void **state)
 	}
 	sgl.sg_nr = SM_BUF_LEN;
 	iod.iod_size = 0;
-	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, epoch++, &dkey, 1,
+	rc = vos_obj_fetch(arg->ctx.tc_co_hdl, oid, epoch++, 0, &dkey, 1,
 			   &iod, &sgl);
 	assert_int_equal(rc, 0);
 	assert_int_equal(iod.iod_size, 1);

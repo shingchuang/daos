@@ -179,6 +179,15 @@ vos_tls_init(const struct dss_thread_local_storage *dtls,
 	}
 
 	tls->vtl_dth = NULL;
+
+	rc = vos_ts_table_alloc(&tls->vtl_ts_table, crt_hlc_get());
+	if (rc) {
+		umem_fini_txd(&tls->vtl_txd);
+		vos_imem_strts_destroy(&tls->vtl_imems_inst);
+		D_FREE(tls);
+		return NULL;
+	}
+
 	return tls;
 }
 
@@ -191,6 +200,7 @@ vos_tls_fini(const struct dss_thread_local_storage *dtls,
 	D_ASSERT(d_list_empty(&tls->vtl_gc_pools));
 	vos_imem_strts_destroy(&tls->vtl_imems_inst);
 	umem_fini_txd(&tls->vtl_txd);
+	vos_ts_table_free(&tls->vtl_ts_table);
 
 	D_FREE(tls);
 }
