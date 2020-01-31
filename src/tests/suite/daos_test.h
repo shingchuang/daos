@@ -281,6 +281,7 @@ int run_daos_md_replication_test(int rank, int size);
 int run_daos_oid_alloc_test(int rank, int size);
 int run_daos_degraded_test(int rank, int size);
 int run_daos_rebuild_test(int rank, int size, int *tests, int test_size);
+int run_daos_reintegration_test(int rank, int size, int *tests, int test_size);
 int run_daos_dtx_test(int rank, int size, int *tests, int test_size);
 int run_daos_vc_test(int rank, int size, int *tests, int test_size);
 int run_daos_checksum_test(int rank, int size);
@@ -318,9 +319,13 @@ int run_daos_sub_tests(const struct CMUnitTest *tests, int tests_size,
 
 void rebuild_io(test_arg_t *arg, daos_obj_id_t *oids, int oids_nr);
 void rebuild_io_validate(test_arg_t *arg, daos_obj_id_t *oids, int oids_nr,
-			 bool discard);
+			 bool discard, bool after_reint);
 void rebuild_single_pool_target(test_arg_t *arg, d_rank_t failed_rank,
 				int failed_tgt);
+
+void reintegrate_single_pool_target(test_arg_t *arg, d_rank_t failed_rank,
+				int failed_tgt);
+
 void rebuild_add_back_tgts(test_arg_t *arg, d_rank_t failed_rank,
 			   int *failed_tgts, int nr);
 

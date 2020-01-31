@@ -587,6 +587,7 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 			rc = remap_alloc_one(remap_list, 0, target, false);
 			if (rc)
 				D_GOTO(out, rc);
+
 		}
 
 		/** skip the first shard because it's been
@@ -930,6 +931,7 @@ jump_map_obj_find_reint(struct pl_map *map, struct daos_obj_md *md,
 	}
 
 	/* Allocate space to hold the layout */
+
 	rc = pl_obj_layout_alloc(jop.jmop_grp_size, jop.jmop_grp_nr,
 			&layout);
 	if (rc)

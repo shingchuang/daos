@@ -59,6 +59,7 @@ struct rebuild_scan_arg {
 	daos_handle_t		rebuild_tree_hdl;
 	struct rebuild_tgt_pool_tracker *rpt;
 	ABT_mutex		scan_lock;
+	daos_rebuild_opc_t	rebuild_op;
 	int			rebuild_tgt_nr;
 };
 
@@ -497,8 +498,11 @@ out:
 }
 
 /**
- * The rebuild objects will be gathered into a global objects arrary by
+ * The rebuild objects will be gathered into a global objects array by
  * target id.
+ *
+ * This groups the updates for each individual target into REBUILD_SEND_LIMIT
+ * size batches before sending them to each target.
  **/
 static int
 rebuild_object_insert(struct rebuild_scan_arg *arg, unsigned int tgt_id,
@@ -517,7 +521,7 @@ rebuild_object_insert(struct rebuild_scan_arg *arg, unsigned int tgt_id,
 	ABT_mutex_lock(arg->scan_lock);
 	rc = dbtree_lookup(toh, &key_iov, &val_iov);
 	if (rc < 0) {
-		/* Try to find the target rebuild tree */
+		/* Don't have a tree for this target - create one */
 		rc = rebuild_tgt_tree_create(toh, tgt_id, &tgt_root);
 		if (rc) {
 			ABT_mutex_unlock(arg->scan_lock);
@@ -575,7 +579,7 @@ rebuild_obj_scan_cb(daos_handle_t ch, vos_iter_entry_t *ent,
 	unsigned int			shard_array[LOCAL_ARRAY_SIZE];
 	unsigned int			*tgts = NULL;
 	unsigned int			*shards = NULL;
-	int				rebuild_nr;
+	int				rebuild_nr = 0;
 	d_rank_t			myrank;
 	int				i;
 	int				rc;
@@ -613,9 +617,21 @@ rebuild_obj_scan_cb(daos_handle_t ch, vos_iter_entry_t *ent,
 		shards = shard_array;
 	}
 
-	rebuild_nr = pl_obj_find_rebuild(map, &md, NULL, rpt->rt_rebuild_ver,
-					 tgts, shards, arg->rebuild_tgt_nr,
-					 myrank);
+	if (arg->rebuild_op == RB_OP_FAIL || arg->rebuild_op == RB_OP_DRAIN) {
+		rebuild_nr = pl_obj_find_rebuild(map, &md, NULL,
+						 rpt->rt_rebuild_ver,
+						 tgts, shards,
+						 arg->rebuild_tgt_nr, myrank);
+	} else if (arg->rebuild_op == RB_OP_ADD) {
+		rebuild_nr = pl_obj_find_reint(map, &md, NULL,
+					       rpt->rt_rebuild_ver,
+					       tgts, shards,
+					       arg->rebuild_tgt_nr, myrank);
+	} else {
+		D_ASSERT(arg->rebuild_op == RB_OP_FAIL ||
+			 arg->rebuild_op == RB_OP_DRAIN ||
+			 arg->rebuild_op == RB_OP_ADD);
+	}
 	if (rebuild_nr <= 0) /* No need rebuild */
 		D_GOTO(out, rc = rebuild_nr);
 
@@ -646,7 +662,8 @@ rebuild_obj_scan_cb(daos_handle_t ch, vos_iter_entry_t *ent,
 			if (rc)
 				D_GOTO(out, rc);
 		} else {
-			D_DEBUG(DB_REBUILD, "skip "DF_UOID".\n", DP_UOID(oid));
+			D_DEBUG(DB_REBUILD, "rebuild skip "DF_UOID".\n",
+				DP_UOID(oid));
 			rc = 0;
 		}
 	}
@@ -717,6 +734,71 @@ rebuild_container_scan_cb(daos_handle_t ih, vos_iter_entry_t *entry,
 	return rc;
 }
 
+static int
+reint_cont_destroy_cb(daos_handle_t ih, vos_iter_entry_t *entry,
+			  vos_iter_type_t type, vos_iter_param_t *iter_param,
+			  void *data, unsigned *acts) {
+	struct rebuild_scan_xarg	*xarg = data;
+	struct rebuild_scan_arg		*arg = xarg->arg;
+	struct rebuild_tgt_pool_tracker *rpt = arg->rpt;
+	struct ds_cont_child		*ds_cont_child;
+	int				rc;
+
+	/* resync DTXs' status firstly. */
+	if (uuid_compare(xarg->co_uuid, entry->ie_couuid) == 0) {
+		D_DEBUG(DB_REBUILD, DF_UUID" already scan\n",
+			DP_UUID(xarg->co_uuid));
+		return 0;
+	}
+
+	rc = dtx_resync(iter_param->ip_hdl, rpt->rt_pool_uuid, entry->ie_couuid,
+			rpt->rt_rebuild_ver, true);
+	if (rc) {
+		D_ERROR(DF_UUID" dtx resync failed: rc %d\n",
+			DP_UUID(rpt->rt_pool_uuid), rc);
+		return rc;
+	}
+
+	rc = ds_cont_child_lookup(rpt->rt_pool_uuid, entry->ie_couuid,
+			&ds_cont_child);
+	if (rc != 0) {
+		D_ERROR(DF_UUID"Reintegration failed to lookup container child."
+				" rc: %d", DP_UUID(entry->ie_couuid), rc);
+		D_GOTO(out, rc);
+	}
+
+	rc = vos_cont_close(ds_cont_child->sc_hdl);
+	if (rc != 0) {
+		D_ERROR(DF_UUID"Reintegration failed to close container."
+				" rc: %d", DP_UUID(entry->ie_couuid), rc);
+		D_GOTO(out, rc);
+	}
+
+	rc = vos_cont_destroy(iter_param->ip_hdl, entry->ie_couuid);
+	if (rc != 0) {
+		D_ERROR(DF_UUID"Reintegration failed to destroy container."
+				" rc: %d", DP_UUID(entry->ie_couuid), rc);
+		D_GOTO(open, rc);
+	}
+
+	rc = vos_cont_create(iter_param->ip_hdl, entry->ie_couuid);
+	if (rc != 0) {
+		D_ERROR(DF_UUID"Reintegration failed to create container."
+				" rc: %d", DP_UUID(entry->ie_couuid), rc);
+		D_GOTO(out, rc);
+	}
+open:
+	rc = vos_cont_open(iter_param->ip_hdl, entry->ie_couuid,
+			&ds_cont_child->sc_hdl);
+	if (rc != 0) {
+		D_ERROR(DF_UUID"Reintegration failed to reopen container."
+				" rc: %d", DP_UUID(entry->ie_couuid), rc);
+	}
+out:
+	return rc;
+
+}
+
 int
 rebuild_scanner(void *data)
 {
@@ -728,7 +810,7 @@ rebuild_scanner(void *data)
 	struct vos_iter_anchors		anchor = { 0 };
 	int				rc;
 
-	if (!is_current_tgt_up(rpt)) {
+	if (is_current_tgt_unavail(rpt)) {
 		D_DEBUG(DB_TRACE, DF_UUID" skip scan\n",
 			DP_UUID(rpt->rt_pool_uuid));
 		return 0;
@@ -745,8 +827,14 @@ rebuild_scanner(void *data)
 	param.ip_flags = VOS_IT_FOR_REBUILD;
 	xarg.arg = arg;
 	xarg.yield_freq = DEFAULT_YIELD_FREQ;
-	rc = vos_iterate(&param, VOS_ITER_COUUID, false, &anchor,
+
+	if (rebuild_status_match(rpt, PO_COMP_ST_UP)) {
+		rc = vos_iterate(&param, VOS_ITER_COUUID, false, &anchor,
+			 reint_cont_destroy_cb, NULL, &xarg);
+	} else {
+		rc = vos_iterate(&param, VOS_ITER_COUUID, false, &anchor,
 			 rebuild_container_scan_cb, NULL, &xarg);
+	}
 
 	ds_pool_child_put(child);
 
@@ -935,6 +1023,7 @@ rebuild_tgt_scan_handler(crt_rpc_t *rpc)
 		D_GOTO(out_lock, rc);
 	}
 
+	scan_arg->rebuild_op = rsi->rsi_rebuild_op;
 	scan_arg->rebuild_tgt_nr = rsi->rsi_tgts_num;
 	rpt_get(rpt);
 	scan_arg->rpt = rpt;
