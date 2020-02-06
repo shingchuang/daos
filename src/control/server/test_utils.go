@@ -117,12 +117,12 @@ func setupMockDrpcClient(svc *mgmtSvc, resp proto.Message, err error) {
 func newTestIOServer(log logging.Logger, isAP bool) *IOServerInstance {
 	r := ioserver.NewTestRunner(nil, ioserver.NewConfig())
 
-	var msCfg mgmtSvcClientCfg
+	var msCfg grpcClientCfg
 	if isAP {
 		msCfg.AccessPoints = append(msCfg.AccessPoints, "localhost")
 	}
 
-	srv := NewIOServerInstance(log, nil, nil, newMgmtSvcClient(context.TODO(), log, msCfg), r)
+	srv := NewIOServerInstance(log, nil, nil, newGrpcClient(context.TODO(), log, msCfg), r)
 	srv.setSuperblock(&Superblock{
 		MS: isAP,
 	})

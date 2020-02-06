@@ -183,7 +183,7 @@ func Start(log *logging.LeveledLogger, cfg *Configuration) error {
 			return err
 		}
 
-		msClient := newMgmtSvcClient(ctx, log, mgmtSvcClientCfg{
+		msClient := newGrpcClient(ctx, log, grpcClientCfg{
 			AccessPoints:    cfg.AccessPoints,
 			ControlAddr:     controlAddr,
 			TransportConfig: cfg.TransportConfig,

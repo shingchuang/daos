@@ -91,6 +91,7 @@ func (h *IOServerHarness) GetMSLeaderInstance() (*IOServerInstance, error) {
 	for _, mi := range h.instances {
 		// try each instance, returning the first one that is a replica (if any are)
 		if err = checkIsMSReplica(mi); err == nil {
+			h.log.Debug("debug\n")
 			return mi, nil
 		}
 	}
@@ -368,8 +369,8 @@ func getMgmtInfo(srv *IOServerInstance) (*mgmtInfo, error) {
 	var err error
 	mi := &mgmtInfo{}
 	mi.isReplica, mi.shouldBootstrap, err = checkMgmtSvcReplica(
-		srv.msClient.cfg.ControlAddr,
-		srv.msClient.cfg.AccessPoints,
+		srv.msClient.GetConfig().ControlAddr,
+		srv.msClient.GetConfig().AccessPoints,
 	)
 	if err != nil {
 		return nil, err

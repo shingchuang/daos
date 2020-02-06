@@ -28,25 +28,29 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pkg/errors"
 
 	"github.com/daos-stack/daos/src/control/common"
+	mgmtpb "github.com/daos-stack/daos/src/control/common/proto/mgmt"
 	"github.com/daos-stack/daos/src/control/logging"
 	"github.com/daos-stack/daos/src/control/server/ioserver"
 	"github.com/daos-stack/daos/src/control/system"
 )
 
-func TestHarnessClient_Start(t *testing.T) {
+const defaultAP = "192.168.1.1:10001"
+
+func TestServer_HarnessClientStart(t *testing.T) {
 	for name, tc := range map[string]struct {
 		hAddr      string
 		ranks      []uint32
+		startResp  *mgmtpb.RanksResp
+		startErr   error
 		expResults system.MemberResults
 		expErr     error
 	}{
 		"single rank success": {
-			hAddr:      "192.168.1.1:10001",
+			hAddr:      "localhost",
 			expResults: system.MemberResults{},
-			expErr:     errors.New("HarnessClient request: no access points defined"),
+			// expErr:     errors.New("HarnessClient request: no access points defined"),
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -59,9 +63,20 @@ func TestHarnessClient_Start(t *testing.T) {
 			svc.harness.setStarted()
 			svc.harness.setRestartable()
 
+			clientCfg := grpcClientCfg{
+				AccessPoints: []string{defaultAP},
+			}
+			clientRets := mockGrpcClientRetvals{
+				startResp: tc.startResp,
+				startErr:  tc.startErr,
+			}
 			for i, srv := range svc.harness.instances {
 				srv._superblock.Rank = new(ioserver.Rank)
 				*srv._superblock.Rank = ioserver.Rank(i + 1)
+				if i == 0 {
+					srv._superblock.MS = true
+					srv.msClient = newMockGrpcClient(log, clientCfg, clientRets)
+				}
 			}
 
 			hc := NewHarnessClient(log, svc.harness)

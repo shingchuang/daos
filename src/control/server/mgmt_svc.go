@@ -1040,7 +1040,7 @@ func (svc *mgmtSvc) LeaderQuery(ctx context.Context, req *mgmtpb.LeaderQueryReq)
 
 	return &mgmtpb.LeaderQueryResp{
 		CurrentLeader: leaderAddr,
-		Replicas:      instance.msClient.cfg.AccessPoints,
+		Replicas:      instance.msClient.GetConfig().AccessPoints,
 	}, nil
 }
 

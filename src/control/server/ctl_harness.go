@@ -62,13 +62,13 @@ type RemoteHarnessReq struct {
 type harnessClient struct {
 	log          logging.Logger
 	localHarness *IOServerHarness
-	client       *mgmtSvcClient
+	client       GrpcClient
 }
 
-// prepareRequest will make sure we have a MgmtSvcClient and return a populated
+// prepareRequest will make sure we have a GrpcClient and return a populated
 // RanksReq proto message from a provided RemoteHarnessReq.
 func (hc *harnessClient) prepareRequest(req RemoteHarnessReq) (*mgmtpb.RanksReq, error) {
-	// Populate MS instance to use as MgmtSvcClient
+	// Populate MS instance to use as GrpcClient
 	if hc.client == nil {
 		mi, err := hc.localHarness.GetMSLeaderInstance()
 		if err != nil {
@@ -94,7 +94,7 @@ func (hc *harnessClient) processReturn(rpcResp *mgmtpb.RanksResp) (system.Member
 	return memberResults, nil
 }
 
-// Query sends Status gRPC using the MgmtSvcClient to the control server at the
+// Query sends gRPC using the GrpcClient to the control server at the
 // specified address to guage the responsiveness of the specified ranks.
 //
 // Results are returned for the ranks specified in the input parameter
@@ -110,7 +110,7 @@ func (hc *harnessClient) Query(ctx context.Context, addr string, ranks ...uint32
 	}
 
 	var rpcResp *mgmtpb.RanksResp
-	rpcResp, err = hc.client.Status(ctx, addr, *rpcReq)
+	rpcResp, err = hc.client.Query(ctx, addr, *rpcReq)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (hc *harnessClient) Query(ctx context.Context, addr string, ranks ...uint32
 	return hc.processReturn(rpcResp)
 }
 
-// PrepShutdown sends PrepShutdown gRPC using the MgmtSvcClient to the control
+// PrepShutdown sends PrepShutdown gRPC using the GrpcClient to the control
 // server at the specified address to prepare the specified ranks for a
 // controlled shutdown.
 //
@@ -143,7 +143,7 @@ func (hc *harnessClient) PrepShutdown(ctx context.Context, addr string, ranks ..
 	return hc.processReturn(rpcResp)
 }
 
-// Stop sends Stop gRPC using the MgmtSvcClient to the control server at the
+// Stop sends Stop gRPC using the GrpcClient to the control server at the
 // specified address to terminate the specified ranks.
 //
 // Results are returned for the ranks specified in the input parameter
@@ -169,7 +169,7 @@ func (hc *harnessClient) Stop(ctx context.Context, addr string, force bool, rank
 	return hc.processReturn(rpcResp)
 }
 
-// Start sends Stop gRPC using the MgmtSvcClient to the control server at the
+// Start sends Stop gRPC using the GrpcClient to the control server at the
 // specified address to start the specified ranks.
 //
 // Results are returned for the ranks specified in the input parameter

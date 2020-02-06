@@ -654,7 +654,8 @@ func TestMgmtSvc_LeaderQuery(t *testing.T) {
 	missingSB := newTestMgmtSvc(nil)
 	missingSB.harness.instances[0]._superblock = nil
 	missingAPs := newTestMgmtSvc(nil)
-	missingAPs.harness.instances[0].msClient.cfg.AccessPoints = nil
+	// TODO: surely this change should break something (cfg->GetConfig)
+	missingAPs.harness.instances[0].msClient.GetConfig().AccessPoints = nil
 
 	for name, tc := range map[string]struct {
 		mgmtSvc *mgmtSvc

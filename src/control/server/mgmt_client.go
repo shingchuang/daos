@@ -41,37 +41,75 @@ const (
 )
 
 type (
-	mgmtSvcClientCfg struct {
+	// GrpcClientCfgHelper provides config access.
+	GrpcClientCfgHelper interface {
+		GetConfig() *grpcClientCfg
+		SetConfig(grpcClientCfg)
+		LeaderAddress() (string, error)
+	}
+	// grpcClientCfgHelper implements GrpcClientCfgHelper.
+	grpcClientCfgHelper struct {
+		cfg grpcClientCfg
+	}
+	// GrpcClient provides a subset of MgmtSvcClient for operations between gRPC servers.
+	GrpcClient interface {
+		GrpcClientCfgHelper
+		Join(context.Context, *mgmtpb.JoinReq) (*mgmtpb.JoinResp, error)
+		PrepShutdown(context.Context, string, mgmtpb.RanksReq) (*mgmtpb.RanksResp, error)
+		Stop(context.Context, string, mgmtpb.RanksReq) (*mgmtpb.RanksResp, error)
+		Start(context.Context, string, mgmtpb.RanksReq) (*mgmtpb.RanksResp, error)
+		Query(context.Context, string, mgmtpb.RanksReq) (*mgmtpb.RanksResp, error)
+	}
+	// grpcClient implements GrpcClient.
+	grpcClient struct {
+		log logging.Logger
+		*grpcClientCfgHelper
+	}
+	grpcClientCfg struct {
 		AccessPoints    []string
 		ControlAddr     *net.TCPAddr
 		TransportConfig *security.TransportConfig
 	}
-	mgmtSvcClient struct {
-		log logging.Logger
-		cfg mgmtSvcClientCfg
-	}
 )
 
-func newMgmtSvcClient(ctx context.Context, log logging.Logger, cfg mgmtSvcClientCfg) *mgmtSvcClient {
-	return &mgmtSvcClient{
-		log: log,
-		cfg: cfg,
+func (gcch *grpcClientCfgHelper) GetConfig() *grpcClientCfg {
+	return &gcch.cfg
+}
+
+func (gcch *grpcClientCfgHelper) SetConfig(cfg grpcClientCfg) {
+	gcch.cfg = cfg
+}
+
+func (gcch *grpcClientCfgHelper) LeaderAddress() (string, error) {
+	if len(gcch.cfg.AccessPoints) == 0 {
+		return "", errors.New("no access points defined")
+	}
+
+	// TODO: Develop algorithm for determining current leader.
+	// For now, just choose the first address.
+	return gcch.cfg.AccessPoints[0], nil
+}
+
+func newGrpcClient(ctx context.Context, log logging.Logger, cfg grpcClientCfg) GrpcClient {
+	return &grpcClient{
+		log:                 log,
+		grpcClientCfgHelper: &grpcClientCfgHelper{cfg: cfg},
 	}
 }
 
 // delayRetry delays next retry.
-func (msc *mgmtSvcClient) delayRetry(ctx context.Context) {
+func (gc *grpcClient) delayRetry(ctx context.Context) {
 	select {
 	case <-ctx.Done(): // break early if the parent context is canceled
 	case <-time.After(retryDelay): // otherwise, block until after the delay duration
 	}
 }
 
-func (msc *mgmtSvcClient) withConnection(ctx context.Context, ap string,
+func (gc *grpcClient) withConnection(ctx context.Context, ap string,
 	fn func(context.Context, mgmtpb.MgmtSvcClient) error) error {
 
 	var opts []grpc.DialOption
-	authDialOption, err := security.DialOptionForTransportConfig(msc.cfg.TransportConfig)
+	authDialOption, err := security.DialOptionForTransportConfig(gc.cfg.TransportConfig)
 	if err != nil {
 		return errors.Wrap(err, "Failed to determine dial option from TransportConfig")
 	}
@@ -88,51 +126,41 @@ func (msc *mgmtSvcClient) withConnection(ctx context.Context, ap string,
 	return fn(ctx, mgmtpb.NewMgmtSvcClient(conn))
 }
 
-func (msc *mgmtSvcClient) LeaderAddress() (string, error) {
-	if len(msc.cfg.AccessPoints) == 0 {
-		return "", errors.New("no access points defined")
-	}
-
-	// TODO: Develop algorithm for determining current leader.
-	// For now, just choose the first address.
-	return msc.cfg.AccessPoints[0], nil
-}
-
-func (msc *mgmtSvcClient) retryOnErr(err error, ctx context.Context, prefix string) bool {
+func (gc *grpcClient) retryOnErr(err error, ctx context.Context, prefix string) bool {
 	if err != nil {
-		msc.log.Debugf("%s: %v", prefix, err)
-		msc.delayRetry(ctx)
+		gc.log.Debugf("%s: %v", prefix, err)
+		gc.delayRetry(ctx)
 		return true
 	}
 
 	return false
 }
 
-func (msc *mgmtSvcClient) retryOnStatus(status int32, ctx context.Context, prefix string) bool {
+func (gc *grpcClient) retryOnStatus(status int32, ctx context.Context, prefix string) bool {
 	if status != 0 {
-		msc.log.Debugf("%s: %d", prefix, status)
-		msc.delayRetry(ctx)
+		gc.log.Debugf("%s: %d", prefix, status)
+		gc.delayRetry(ctx)
 		return true
 	}
 
 	return false
 }
 
-func (msc *mgmtSvcClient) Join(ctx context.Context, req *mgmtpb.JoinReq) (resp *mgmtpb.JoinResp, joinErr error) {
-	ap, err := msc.LeaderAddress()
+func (gc *grpcClient) Join(ctx context.Context, req *mgmtpb.JoinReq) (resp *mgmtpb.JoinResp, joinErr error) {
+	ap, err := gc.LeaderAddress()
 	if err != nil {
 		return nil, err
 	}
 
-	joinErr = msc.withConnection(ctx, ap,
+	joinErr = gc.withConnection(ctx, ap,
 		func(ctx context.Context, pbClient mgmtpb.MgmtSvcClient) error {
 			if req.Addr == "" {
-				req.Addr = msc.cfg.ControlAddr.String()
+				req.Addr = gc.cfg.ControlAddr.String()
 			}
 
 			prefix := fmt.Sprintf("join(%s, %+v)", ap, *req)
-			msc.log.Debugf(prefix + " begin")
-			defer msc.log.Debugf(prefix + " end")
+			gc.log.Debugf(prefix + " begin")
+			defer gc.log.Debugf(prefix + " end")
 
 			for {
 				var err error
@@ -144,7 +172,7 @@ func (msc *mgmtSvcClient) Join(ctx context.Context, req *mgmtpb.JoinReq) (resp *
 				}
 
 				resp, err = pbClient.Join(ctx, req)
-				if msc.retryOnErr(err, ctx, prefix) {
+				if gc.retryOnErr(err, ctx, prefix) {
 					continue
 				}
 				if resp == nil {
@@ -152,7 +180,7 @@ func (msc *mgmtSvcClient) Join(ctx context.Context, req *mgmtpb.JoinReq) (resp *
 				}
 				// TODO: Stop retrying upon certain errors (e.g., "not
 				// MS", "rank unavailable", and "excluded").
-				if msc.retryOnStatus(resp.Status, ctx, prefix) {
+				if gc.retryOnStatus(resp.Status, ctx, prefix) {
 					continue
 				}
 
@@ -167,11 +195,11 @@ func (msc *mgmtSvcClient) Join(ctx context.Context, req *mgmtpb.JoinReq) (resp *
 //
 // Shipped function propose ranks for shutdown by sending requests over dRPC
 // to each rank.
-func (msc *mgmtSvcClient) PrepShutdown(ctx context.Context, destAddr string, req mgmtpb.RanksReq) (resp *mgmtpb.RanksResp, psErr error) {
-	psErr = msc.withConnection(ctx, destAddr,
+func (gc *grpcClient) PrepShutdown(ctx context.Context, destAddr string, req mgmtpb.RanksReq) (resp *mgmtpb.RanksResp, psErr error) {
+	psErr = gc.withConnection(ctx, destAddr,
 		func(ctx context.Context, pbClient mgmtpb.MgmtSvcClient) (err error) {
 
-			msc.log.Debugf("prep shutdown(%s, %+v)", destAddr, req)
+			gc.log.Debugf("prep shutdown(%s, %+v)", destAddr, req)
 
 			resp, err = pbClient.PrepShutdownRanks(ctx, &req)
 
@@ -185,13 +213,13 @@ func (msc *mgmtSvcClient) PrepShutdown(ctx context.Context, destAddr string, req
 //
 // Shipped function terminates ranks directly from the harness at the listening
 // address without requesting over dRPC.
-func (msc *mgmtSvcClient) Stop(ctx context.Context, destAddr string, req mgmtpb.RanksReq) (resp *mgmtpb.RanksResp, stopErr error) {
-	stopErr = msc.withConnection(ctx, destAddr,
+func (gc *grpcClient) Stop(ctx context.Context, destAddr string, req mgmtpb.RanksReq) (resp *mgmtpb.RanksResp, stopErr error) {
+	stopErr = gc.withConnection(ctx, destAddr,
 		func(ctx context.Context, pbClient mgmtpb.MgmtSvcClient) error {
 
 			prefix := fmt.Sprintf("stop(%s, %+v)", destAddr, req)
-			msc.log.Debugf(prefix + " begin")
-			defer msc.log.Debugf(prefix + " end")
+			gc.log.Debugf(prefix + " begin")
+			defer gc.log.Debugf(prefix + " end")
 
 			for {
 				var err error
@@ -206,7 +234,7 @@ func (msc *mgmtSvcClient) Stop(ctx context.Context, destAddr string, req mgmtpb.
 				// error returned if any instance is still running so that
 				// we retry until all are terminated on host
 				resp, err = pbClient.StopRanks(ctx, &req)
-				if msc.retryOnErr(err, ctx, prefix) {
+				if gc.retryOnErr(err, ctx, prefix) {
 					continue
 				}
 				if resp == nil {
@@ -227,13 +255,13 @@ func (msc *mgmtSvcClient) Stop(ctx context.Context, destAddr string, req mgmtpb.
 // rank managed by the harness listening at the destination address.
 //
 // StartRanks will return results for any instances started by the harness.
-func (msc *mgmtSvcClient) Start(ctx context.Context, destAddr string, req mgmtpb.RanksReq) (resp *mgmtpb.RanksResp, startErr error) {
-	startErr = msc.withConnection(ctx, destAddr,
+func (gc *grpcClient) Start(ctx context.Context, destAddr string, req mgmtpb.RanksReq) (resp *mgmtpb.RanksResp, startErr error) {
+	startErr = gc.withConnection(ctx, destAddr,
 		func(ctx context.Context, pbClient mgmtpb.MgmtSvcClient) (err error) {
 
 			prefix := fmt.Sprintf("start(%s, %+v)", destAddr, req)
-			msc.log.Debugf(prefix + " begin")
-			defer msc.log.Debugf(prefix + " end")
+			gc.log.Debugf(prefix + " begin")
+			defer gc.log.Debugf(prefix + " end")
 
 			ctx, _ = context.WithTimeout(ctx, retryDelay)
 
@@ -247,19 +275,19 @@ func (msc *mgmtSvcClient) Start(ctx context.Context, destAddr string, req mgmtpb
 	return
 }
 
-// Status calls function remotely over gRPC on server listening at destAddr.
+// Query calls function remotely over gRPC on server listening at destAddr.
 //
 // Shipped function issues PingRank dRPC requests to query each rank to verify
 // activity.
 //
 // PingRanks should return ping results for any instances managed by the harness.
-func (msc *mgmtSvcClient) Status(ctx context.Context, destAddr string, req mgmtpb.RanksReq) (resp *mgmtpb.RanksResp, statusErr error) {
-	statusErr = msc.withConnection(ctx, destAddr,
+func (gc *grpcClient) Query(ctx context.Context, destAddr string, req mgmtpb.RanksReq) (resp *mgmtpb.RanksResp, statusErr error) {
+	statusErr = gc.withConnection(ctx, destAddr,
 		func(ctx context.Context, pbClient mgmtpb.MgmtSvcClient) (err error) {
 
 			prefix := fmt.Sprintf("status(%s, %+v)", destAddr, req)
-			msc.log.Debugf(prefix + " begin")
-			defer msc.log.Debugf(prefix + " end")
+			gc.log.Debugf(prefix + " begin")
+			defer gc.log.Debugf(prefix + " end")
 
 			resp, err = pbClient.PingRanks(ctx, &req)
 
