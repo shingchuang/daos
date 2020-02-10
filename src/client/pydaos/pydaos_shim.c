@@ -469,9 +469,6 @@ __shim_handle__obj_close(PyObject *self, PyObject *args)
 /** max number of concurrent put/get requests */
 #define MAX_INFLIGHT 16
 
-/** Initial value size for KV get */
-#define VAL_SZ		(4*1024)
-
 struct kv_op {
 	daos_event_t	 ev;
 	PyObject	*key_obj;
@@ -520,9 +517,11 @@ __shim_handle__kv_get(PyObject *self, PyObject *args)
 	int		 i = 0;
 	int		 rc;
 	int		 ret;
+	size_t		 v_size;
 
 	/* Parse arguments */
-	RETURN_NULL_IF_FAILED_TO_PARSE(args, "LO", &oh.cookie, &daos_dict);
+	RETURN_NULL_IF_FAILED_TO_PARSE(args, "LO!l", &oh.cookie, &PyDict_Type,
+				       &daos_dict, &v_size);
 
 	rc = daos_eq_create(&eq);
 	if (rc)
@@ -542,7 +541,7 @@ __shim_handle__kv_get(PyObject *self, PyObject *args)
 			rc = daos_event_init(evp, eq, NULL);
 			if (rc)
 				break;
-			op->size = VAL_SZ;
+			op->size = v_size;
 			D_ALLOC(op->buf, op->size);
 			if (op->buf == NULL) {
 				rc = -DER_NOMEM;
@@ -574,10 +573,7 @@ rewait:
 			} else if (evp->ev_error == -DER_REC2BIG) {
 				char *new_buff;
 
-				if (op->size == VAL_SZ)
-					op->size = (1024*1024);
-				else
-					op->size *= 2;
+				op->size *= 2;
 				D_REALLOC(new_buff, op->buf, op->size);
 				if (new_buff == NULL) {
 					rc = -DER_NOMEM;
@@ -600,8 +596,8 @@ rewait:
 				rc = evp->ev_error;
 				break;
 			}
-			if (op->size < VAL_SZ)
-				op->size = VAL_SZ;
+			if (op->size < v_size)
+				op->size = v_size;
 			evp->ev_error = 0;
 		}
 
@@ -644,10 +640,7 @@ rewait:
 				rc2 = daos_event_init(evp, eq, NULL);
 
 				op = container_of(evp, struct kv_op, ev);
-				if (op->size == VAL_SZ)
-					op->size = (1024*1024);
-				else
-					op->size *= 2;
+				op->size *= 2;
 				D_REALLOC(new_buff, op->buf, op->size);
 				if (new_buff == NULL)
 					D_GOTO(out, rc = -DER_NOMEM);
