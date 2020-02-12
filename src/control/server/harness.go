@@ -275,10 +275,16 @@ func (h *IOServerHarness) StopInstances(log logging.Logger, ctx context.Context,
 
 	select {
 	case <-ctx.Done():
+		log.Debug("I/O server shutdown failed")
 	case <-stopped:
+		log.Debug("I/O server shutdown succeeded")
 	}
 
-	return common.ConcatErrors(stopErrors, nil)
+	if len(stopErrors) > 0 {
+		return common.ConcatErrors(stopErrors, nil)
+	}
+
+	return nil
 }
 
 // waitInstancesReady awaits ready signal from I/O server before starting
