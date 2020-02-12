@@ -63,6 +63,16 @@ var (
 		"no DAOS IO Servers specified in configuration",
 		"specify at least one IO Server configuration ('servers' list parameter) and restart the control server",
 	)
+	FaultConfigBadShutdownTimeout = serverFault(
+		code.ServerConfigBadShutdownTimeout,
+		"shutdown value could not be parsed",
+		"specify a valid timeout e.g. 3s in configuration and restart the control server",
+	)
+	FaultHarnessNotStarted = serverFault(
+		code.ServerHarnessNotStarted,
+		"harness for DAOS IO Server instances is not started",
+		"",
+	)
 )
 
 func FaultScmUnmanaged(mntPoint string) *fault.Fault {
@@ -104,6 +114,14 @@ func FaultConfigOverlappingBdevDeviceList(curIdx, seenIdx int) *fault.Fault {
 		code.ServerConfigOverlappingBdevDeviceList,
 		fmt.Sprintf("the bdev_list value in IO server %d overlaps with entries in server %d", curIdx, seenIdx),
 		"ensure that each IO server has a unique set of bdev_list entries and restart",
+	)
+}
+
+func FaultInstanceNoSuperblock(idx uint32) *fault.Fault {
+	return serverFault(
+		code.ServerInstanceNoSuperblock,
+		fmt.Sprintf("instance %d has no superblock", idx),
+		"reformat DAOS storage with 'dmg storage format'",
 	)
 }
 

@@ -1657,7 +1657,7 @@ func TestMgmtSvc_PrepShutdownRanks(t *testing.T) {
 		"missing superblock": {
 			missingSB: true,
 			req:       &mgmtpb.RanksReq{},
-			expErr:    errors.New("instance 0 has no superblock"),
+			expErr:    FaultInstanceNoSuperblock(0),
 		},
 		"instances stopped": {
 			req:              &mgmtpb.RanksReq{},
@@ -1793,7 +1793,7 @@ func TestMgmtSvc_StopRanks(t *testing.T) {
 		"missing superblock": {
 			missingSB: true,
 			req:       &mgmtpb.RanksReq{},
-			expErr:    errors.New("instance 0 has no superblock"),
+			expErr:    FaultInstanceNoSuperblock(0),
 		},
 		"dRPC resp fails": { // doesn't effect result, err logged
 			req:     &mgmtpb.RanksReq{},
@@ -1934,7 +1934,7 @@ func TestMgmtSvc_PingRanks(t *testing.T) {
 		"missing superblock": {
 			missingSB: true,
 			req:       &mgmtpb.RanksReq{},
-			expErr:    errors.New("instance 0 has no superblock"),
+			expErr:    FaultInstanceNoSuperblock(0),
 		},
 		"instances stopped": {
 			req:              &mgmtpb.RanksReq{},
@@ -2090,7 +2090,7 @@ func TestMgmtSvc_StartRanks(t *testing.T) {
 			missingSB:        true,
 			instancesStopped: true,
 			req:              &mgmtpb.RanksReq{},
-			expErr:           errors.New("instance 0 has no superblock"),
+			expErr:           FaultInstanceNoSuperblock(0),
 		},
 		"instances started": {
 			req:    &mgmtpb.RanksReq{},

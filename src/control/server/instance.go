@@ -48,7 +48,7 @@ import (
 type IOServerRunner interface {
 	Start(context.Context, chan<- error) error
 	IsRunning() bool
-	Stop(bool) error
+	Stop(os.Signal) error
 	GetConfig() *ioserver.Config
 }
 
@@ -223,8 +223,8 @@ func (srv *IOServerInstance) Start(ctx context.Context, errChan chan<- error) er
 	return srv.runner.Start(ctx, errChan)
 }
 
-func (srv *IOServerInstance) Stop(force bool) error {
-	return srv.runner.Stop(force)
+func (srv *IOServerInstance) Stop(signal os.Signal) error {
+	return srv.runner.Stop(signal)
 }
 
 func (srv *IOServerInstance) IsStarted() bool {

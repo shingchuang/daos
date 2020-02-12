@@ -26,11 +26,14 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 
+	"github.com/daos-stack/daos/src/control/common"
 	"github.com/daos-stack/daos/src/control/logging"
 	"github.com/daos-stack/daos/src/control/server/ioserver"
 	"github.com/daos-stack/daos/src/control/system"
@@ -228,6 +231,56 @@ func (h *IOServerHarness) startInstances(ctx context.Context, membership *system
 	return nil
 }
 
+// StopInstances will stop harness-managed instances.
+//
+// Iterate over instances and call Stop(signal) on each, return when all
+// instances are stopped or context is done.
+func (h *IOServerHarness) StopInstances(log logging.Logger, ctx context.Context, signal os.Signal, ranks ...uint32) error {
+	if !h.IsStarted() {
+		return FaultHarnessNotStarted
+	}
+
+	stopErrors := make([]error, 0, len(h.instances))
+	for _, i := range h.Instances() {
+		if !i.hasSuperblock() { // critical error
+			return FaultInstanceNoSuperblock(i.Index())
+		}
+
+		rank, ok := validateInstanceRank(log, i, ranks)
+		if !ok { // filtered out, no result expected
+			continue
+		}
+
+		if !i.IsStarted() {
+			continue
+		}
+
+		if err := i.Stop(signal); err != nil {
+			stopErrors = append(stopErrors, errors.Wrapf(err,
+				"rank %d sent signal %s", *rank, signal))
+		}
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		for {
+			if len(h.StartedRanks()) > 0 {
+				time.Sleep(instanceUpdateDelay)
+				continue
+			}
+			close(stopped)
+			break
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+	case <-stopped:
+	}
+
+	return common.ConcatErrors(stopErrors, nil)
+}
+
 // waitInstancesReady awaits ready signal from I/O server before starting
 // management service on MS replicas immediately so other instances can join.
 // I/O server modules are then loaded.
@@ -324,13 +377,14 @@ func (h *IOServerHarness) Start(parent context.Context, membership *system.Membe
 	return nil
 }
 
-// RestartInstances will signal the harness to restart configured instances.
-func (h *IOServerHarness) RestartInstances() error {
+// StartInstances will signal the harness to start configured instances once
+// stopped.
+func (h *IOServerHarness) StartInstances() error {
 	h.RLock()
 	defer h.RUnlock()
 
 	if !h.IsStarted() {
-		return errors.New("can't start instances: harness not started")
+		return FaultHarnessNotStarted
 	}
 	if !h.IsRestartable() {
 		return errors.New("can't start instances: already running")

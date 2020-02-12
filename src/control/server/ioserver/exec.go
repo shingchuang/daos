@@ -159,15 +159,11 @@ func (r *Runner) IsRunning() bool {
 }
 
 // Stop sends relevant shutdown signal to the Runner process (idempotent).
-func (r *Runner) Stop(force bool) error {
+func (r *Runner) Stop(signal os.Signal) error {
 	if !r.IsRunning() {
 		return nil
 	}
 
-	signal := syscall.SIGTERM
-	if force {
-		signal = syscall.SIGKILL
-	}
 	r.log.Debugf("Stopping I/O server instance %d (%s)", r.Config.Index, signal)
 
 	return r.cmd.Process.Signal(signal)

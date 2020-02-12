@@ -32,6 +32,7 @@ import (
 	"os/user"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -252,6 +253,20 @@ func Start(log *logging.LeveledLogger, cfg *Configuration) error {
 		if err := drpcCleanup(cfg.SocketDir); err != nil {
 			log.Errorf("error during dRPC cleanup: %s", err)
 		}
+
+		// Attampt graceful shutdown of I/O servers.
+		timeout, err := time.ParseDuration(cfg.ShutdownTimeout)
+		if err != nil {
+			log.Errorf("parsing shutdown timeout from config: %s", err)
+		} else {
+			stopCtx, cancel := context.WithTimeout(ctx, timeout)
+			if err := harness.StopInstances(log, stopCtx, sig); err != nil {
+				log.Errorf("shutdown instances: %s", err)
+			}
+			cancel()
+		}
+
+		// Will SIGKILL I/O servers if still running.
 		shutdown()
 	}()
 

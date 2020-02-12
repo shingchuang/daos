@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -742,7 +743,7 @@ func (svc *mgmtSvc) PrepShutdownRanks(ctx context.Context, req *mgmtpb.RanksReq)
 
 	for _, i := range svc.harness.instances {
 		if !i.hasSuperblock() { // critical error
-			return nil, errors.Errorf("instance %d has no superblock", i.Index())
+			return nil, FaultInstanceNoSuperblock(i.Index())
 		}
 
 		rank, ok := validateInstanceRank(svc.log, i, req.Ranks)
@@ -772,63 +773,26 @@ func (svc *mgmtSvc) PrepShutdownRanks(ctx context.Context, req *mgmtpb.RanksReq)
 // StopRanks implements the method defined for the Management Service.
 //
 // Stop data-plane instance managed by control-plane identified by unique rank.
-//
-// Iterate over instances issuing kill rank requests, wait until either all instances are
-// stopped or timeout occurs and then populate response results based on instance started state.
-// Return error if any instances are still running in order to enable retries at the sender.
-//
-// TODO: Enable "force" if number of retries fail, issuing a different signal/mechanism for
-//       terminating the process.
-func (svc *mgmtSvc) StopRanks(ctx context.Context, req *mgmtpb.RanksReq) (*mgmtpb.RanksResp, error) {
+// After attempting to stop instances through harness (when either all instances
+// are stopped or timeout has occurred, populate response results based on
+// instance started state.
+func (svc *mgmtSvc) StopRanks(parent context.Context, req *mgmtpb.RanksReq) (*mgmtpb.RanksResp, error) {
 	if req == nil {
 		return nil, errors.New("nil request")
 	}
 	timeout := time.Duration(req.Timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
 	svc.log.Debugf("MgmtSvc.StopRanks dispatch, req:%+v, timeout:%s\n", *req, timeout)
 
 	resp := &mgmtpb.RanksResp{}
 
-	for _, i := range svc.harness.instances {
-		if !i.hasSuperblock() { // critical error
-			return nil, errors.Errorf("instance %d has no superblock", i.Index())
-		}
-
-		rank, ok := validateInstanceRank(svc.log, i, req.Ranks)
-		if !ok { // filtered out, no result expected
-			continue
-		}
-
-		if !i.IsStarted() { // skip as already stopped
-			svc.log.Debugf("rank %d already stopped", *rank)
-			continue
-		}
-
-		if err := i.Stop(req.Force); err != nil {
-			var msg string
-			if req.Force {
-				msg = " (forced)"
-			}
-			svc.log.Error(errors.Wrapf(err,
-				"rank %d stop%s", *rank, msg).Error())
-		}
+	signal := syscall.SIGINT
+	if req.Force {
+		signal = syscall.SIGKILL
 	}
-
-	stopped := make(chan struct{})
-	// select until instances stop or timeout occurs (at which point get results of each instance)
-	go func() {
-		for {
-			if len(svc.harness.StartedRanks()) > 0 {
-				time.Sleep(instanceUpdateDelay)
-				continue
-			}
-			close(stopped)
-			break
-		}
-	}()
-
-	select {
-	case <-stopped:
-	case <-time.After(timeout):
+	if err := svc.harness.StopInstances(svc.log, ctx, signal, req.Ranks...); err != nil {
+		svc.log.Debugf(err.Error()) // useful for diagnosing issues but don't return
 	}
 
 	// either all instances stopped or timeout occurred
@@ -837,7 +801,7 @@ func (svc *mgmtSvc) StopRanks(ctx context.Context, req *mgmtpb.RanksReq) (*mgmtp
 		rrErr := errors.Errorf("want %s, got %s", system.MemberStateStopped, state)
 
 		if !i.hasSuperblock() {
-			return nil, errors.Errorf("instance %d has no superblock", i.Index())
+			return nil, FaultInstanceNoSuperblock(i.Index())
 		}
 
 		if !i.IsStarted() {
@@ -903,7 +867,7 @@ func (svc *mgmtSvc) PingRanks(ctx context.Context, req *mgmtpb.RanksReq) (*mgmtp
 
 	for _, i := range svc.harness.Instances() {
 		if !i.hasSuperblock() { // critical error
-			return nil, errors.Errorf("instance %d has no superblock", i.Index())
+			return nil, FaultInstanceNoSuperblock(i.Index())
 		}
 
 		rank, ok := validateInstanceRank(svc.log, i, req.Ranks)
@@ -943,7 +907,7 @@ func (svc *mgmtSvc) StartRanks(ctx context.Context, req *mgmtpb.RanksReq) (*mgmt
 	resp := &mgmtpb.RanksResp{}
 
 	// perform controlled restart of I/O Server harness
-	if err := svc.harness.RestartInstances(); err != nil {
+	if err := svc.harness.StartInstances(); err != nil {
 		return nil, err
 	}
 
@@ -971,7 +935,7 @@ func (svc *mgmtSvc) StartRanks(ctx context.Context, req *mgmtpb.RanksReq) (*mgmt
 		rrErr := errors.Errorf("want %s, got %s", system.MemberStateStarted, state)
 
 		if !i.hasSuperblock() {
-			return nil, errors.Errorf("instance %d has no superblock", i.Index())
+			return nil, FaultInstanceNoSuperblock(i.Index())
 		}
 
 		if i.IsStarted() {
