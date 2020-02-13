@@ -78,6 +78,8 @@ const (
 	ServerConfigNoServers
 	ServerConfigBadShutdownTimeout
 	ServerScmUnmanaged
+	ServerBdevNotFound
+	ServerBdevFormatSkipped
 	ServerConfigDuplicateFabric
 	ServerConfigDuplicateLogFile
 	ServerConfigDuplicateScmMount
