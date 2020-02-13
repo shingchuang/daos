@@ -275,9 +275,8 @@ func (h *IOServerHarness) StopInstances(log logging.Logger, ctx context.Context,
 
 	select {
 	case <-ctx.Done():
-		log.Debug("I/O server shutdown failed")
+		log.Error("graceful shutdown did not complete")
 	case <-stopped:
-		log.Debug("I/O server shutdown succeeded")
 	}
 
 	if len(stopErrors) > 0 {
@@ -328,9 +327,9 @@ func (h *IOServerHarness) monitor(ctx context.Context) error {
 	h.log.Debug("monitoring instances")
 	for {
 		select {
-		case <-ctx.Done(): // received when harness is exiting
+		case <-ctx.Done(): // harness exit
 			return ctx.Err()
-		case err := <-h.errChan: // received when instance exits
+		case err := <-h.errChan: // instance exit
 			// TODO: Restart failed instances on unexpected exit.
 			msg := fmt.Sprintf("instance exited: %v", err)
 			if len(h.StartedRanks()) == 0 {
@@ -338,7 +337,7 @@ func (h *IOServerHarness) monitor(ctx context.Context) error {
 				h.setRestartable()
 			}
 			h.log.Info(msg)
-		case <-h.restart: // trigger harness to restart instances
+		case <-h.restart: // harness to restart instances
 			return nil
 		}
 	}
@@ -361,6 +360,14 @@ func (h *IOServerHarness) Start(parent context.Context, membership *system.Membe
 
 	ctx, shutdown := context.WithCancel(parent)
 	defer shutdown()
+
+	defer func() {
+		if cfg != nil {
+			if err := drpcCleanup(cfg.SocketDir); err != nil {
+				h.log.Errorf("error during dRPC cleanup: %s", err)
+			}
+		}
+	}()
 
 	for {
 		if cfg != nil {
